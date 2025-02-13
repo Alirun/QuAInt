@@ -1,4 +1,4 @@
-import { Memory, State } from "@elizaos/core";
+import { Memory } from "@elizaos/core";
 
 export enum TriggerType {
   POLLING = 'polling',

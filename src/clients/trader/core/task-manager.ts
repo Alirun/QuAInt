@@ -1,22 +1,7 @@
 import { IAgentRuntime, Memory, MemoryManager, State, composeContext, generateObject, ModelClass, stringToUuid, UUID } from "@elizaos/core";
 import { z } from "zod";
 import { Task, TaskManager, TaskMemory, TriggerType } from "./types";
-
-const taskCompletionTemplate = `
-Evaluate if the following task is complete based on recent conversations and market state:
-
-Task Description: {{description}}
-Definition of Done: {{definitionOfDone}}
-
-Recent conversations:
-{{recentMessages}}
-
-Respond with a JSON object:
-{
-  "isComplete": true/false,
-  "reason": "explanation"
-}
-`;
+import { taskCompletionTemplate } from "../constants/templates";
 
 type TaskCompletion = {
   isComplete: boolean;
@@ -43,12 +28,9 @@ export class DefaultTaskManager implements TaskManager {
     this.roomId = roomId;
     this.userId = userId;
     this.agentId = agentId;
-    
-    // Initialize current task asynchronously
-    this.initializeCurrentTask();
   }
 
-  private async initializeCurrentTask(): Promise<void> {
+  async initialize(): Promise<void> {
     const tasks = await this.getAllTasks();
     // Find oldest non-completed task
     this.currentTask = tasks

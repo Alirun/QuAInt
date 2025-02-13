@@ -1,21 +1,7 @@
 import { IAgentRuntime, Memory, MemoryManager, State, composeContext, generateObject, ModelClass, stringToUuid, UUID, elizaLogger } from "@elizaos/core";
 import { z } from "zod";
 import { Trigger, TriggerManager, TriggerMemory, TriggerType } from "./types";
-
-const triggerEvaluationTemplate = `
-Evaluate if the following trigger condition is met based on recent conversations and market state:
-
-Condition: {{condition}}
-
-Recent conversations:
-{{recentMessages}}
-
-Respond with a JSON object:
-{
-  "isTriggered": true/false,
-  "reason": "explanation"
-}
-`;
+import { triggerEvaluationTemplate } from "../constants/templates";
 
 const TriggerEvaluationSchema = z.object({
   isTriggered: z.boolean(),
