@@ -31,7 +31,7 @@ export class DefaultTaskManager implements TaskManager {
   }
 
   async initialize(): Promise<void> {
-    const tasks = await this.getAllTasks();
+    const tasks = await this.getLatestTasks();
     // Find oldest non-completed task
     this.currentTask = tasks
       .filter(t => t.status !== 'completed')
@@ -85,13 +85,15 @@ export class DefaultTaskManager implements TaskManager {
       createdAt: Date.now()
     };
 
+    // Remove old memories for this task before creating new one
+    await this.taskManager.removeMemory(stringToUuid(task.id));
     await this.taskManager.createMemory(memory);
     
     // Update current task if this is the current one
     if (this.currentTask?.id === task.id) {
       // If this task is completed, find the next incomplete task by creation date
       if (task.status === 'completed') {
-        const allTasks = await this.getAllTasks();
+        const allTasks = await this.getLatestTasks();
         this.currentTask = allTasks
           .filter(t => t.status !== 'completed')
           .sort((a, b) => a.createdAt - b.createdAt)[0];
@@ -118,9 +120,22 @@ export class DefaultTaskManager implements TaskManager {
     };
   }
 
-  async getAllTasks(): Promise<Task[]> {
+  // Get all tasks, but only the latest version of each task
+  private async getLatestTasks(): Promise<Task[]> {
     const memories = await this.taskManager.getMemories({ roomId: this.roomId });
-    return memories.map(memory => ({
+    
+    // Group memories by task ID and get the latest version of each
+    const latestMemories = new Map<string, Memory>();
+    for (const memory of memories) {
+      const existingMemory = latestMemories.get(memory.id);
+      if (!existingMemory || memory.createdAt > existingMemory.createdAt) {
+        latestMemories.set(memory.id, memory);
+      }
+    }
+
+    return Array.from(latestMemories.values())
+      .sort((a, b) => (a.content.createdAt as number) - (b.content.createdAt as number))
+      .map(memory => ({
       id: memory.id,
       description: memory.content.description as string,
       definitionOfDone: memory.content.definitionOfDone as string,
@@ -129,6 +144,11 @@ export class DefaultTaskManager implements TaskManager {
       data: memory.content.data as Record<string, any> | undefined,
       createdAt: memory.content.createdAt as number
     }));
+  }
+
+  // For backward compatibility
+  async getAllTasks(): Promise<Task[]> {
+    return this.getLatestTasks();
   }
 
   async evaluateTaskCompletion(task: Task, state: State): Promise<boolean> {
