@@ -1,6 +1,6 @@
 import { Plugin } from "@elizaos/core";
 import { AvailableUnderlyingAssetsProvider, IndexPricesProvider } from "./providers/index.ts";
-import { CheckIfOptionIsAvailable, GetAvailableOptions, GetOptionPriceAction } from "./actions/index.ts";
+import { CheckIfOptionIsAvailable, GetAvailableOptions, GetOptionPriceAction, PlaceOrderAction } from "./actions/index.ts";
 
 export const derivativesPlugin: Plugin = {
   name: "derivatives",
@@ -8,7 +8,8 @@ export const derivativesPlugin: Plugin = {
   actions: [
     CheckIfOptionIsAvailable,
     GetAvailableOptions,
-    GetOptionPriceAction
+    GetOptionPriceAction,
+    PlaceOrderAction,
   ],
   providers: [
     AvailableUnderlyingAssetsProvider,

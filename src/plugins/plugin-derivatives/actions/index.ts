@@ -3,7 +3,7 @@ import { z } from "zod";
 import assert from 'assert';
 import { elizaLogger } from "@elizaos/core";
 
-import { createAction } from "../../../goat/adapters/eliza.ts";
+import { createAction } from "./utils.ts";
 import { getDeribitSingleton } from "../services/deribit-api/index.ts";
 import { DeribitCurrency } from "../services/deribit-api/types.ts";
 
@@ -84,5 +84,32 @@ export const GetOptionPriceAction = createAction(createTool(
     elizaLogger.info({ instrumentSummary })
 
     return instrumentSummary.mark_price
+  }
+))
+
+export const PlaceOrderAction = createAction(createTool(
+  {
+    name: "place_order",
+    description: "Place an order for a given option instrument <ASSET>-<DMMMYY>-<STRIKE>-<C|P>",
+    parameters: z.object({
+      instrumentName: z.string({ description: "Instrument name in format <ASSET>-<DMMMYY>-<STRIKE>-<C|P>" }),
+      amount: z.number({ description: "The amount to buy/sell" }),
+      type: z.enum(["market", "limit"], { description: "Order type: market or limit" }).optional(),
+      price: z.number({ description: "Limit price. Required if type is limit" }).optional(),
+      side: z.enum(["buy", "sell"], { description: "Side: buy or sell" }),
+    }),
+  },
+  async (parameters) => {
+    elizaLogger.info({ parameters })
+
+    const instrumentName = assertAndParseInstrumentName(parameters.instrumentName)
+
+    // Basic validation.  More thorough validation would be needed in a real implementation
+    if (parameters.type === "limit" && parameters.price === undefined) {
+      throw new Error("Limit price is required for limit orders");
+    }
+
+    // Mock implementation - just return a confirmation message
+    return `Successfully placed ${parameters.side} order for ${parameters.amount} of ${instrumentName} at ${parameters.type === "limit" ? parameters.price : "market price"}`;
   }
 ))

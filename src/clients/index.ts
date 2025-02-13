@@ -1,6 +1,8 @@
 import { TelegramClientInterface } from "@elizaos/client-telegram";
 import { Character, IAgentRuntime } from "@elizaos/core";
 
+import { TraderClient } from "./trader";
+
 export async function initializeClients(
   character: Character,
   runtime: IAgentRuntime
@@ -11,6 +13,11 @@ export async function initializeClients(
   if (clientTypes.includes("telegram")) {
     const telegramClient = await TelegramClientInterface.start(runtime);
     if (telegramClient) clients.push(telegramClient);
+  }
+
+  if (clientTypes.includes("trader")) {
+    const traderClient = await TraderClient.start(runtime);
+    if (traderClient) clients.push(traderClient);
   }
 
   if (character.plugins?.length > 0) {
