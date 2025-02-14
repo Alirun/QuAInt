@@ -1,7 +1,8 @@
 import { elizaLogger, generateMessageResponse, IAgentRuntime, Memory, ModelClass, State, composeContext, stringToUuid, UUID } from "@elizaos/core";
-import { Task, Trigger } from "../core/types";
+import { Task, Trigger, TriggerEvaluation } from "../core/types";
 import { DefaultTaskManager } from "../core/task-manager";
 import { DefaultTriggerManager } from "../core/trigger-manager";
+import { DefaultNoteManager } from "../core/note-manager";
 import { triggerHandlerTemplate, triggerAdjustmentTemplate } from "../constants/templates";
 
 export async function processTask(
@@ -9,6 +10,7 @@ export async function processTask(
   runtime: IAgentRuntime,
   taskManager: DefaultTaskManager,
   triggerManager: DefaultTriggerManager,
+  noteManager: DefaultNoteManager,
   roomId: UUID,
   callback: (messageId: UUID) => (content: any) => Promise<Memory[]>
 ): Promise<void> {
@@ -21,14 +23,18 @@ export async function processTask(
 
   // Get all tasks for template
   const allTasks = await taskManager.getAllTasks();
+  const notes = await noteManager.getAllNotes();
 
   // Check if any trigger is activated and store first positive trigger
   let firstPositiveTrigger: Trigger | null = null;
+  let triggerEvaluation: TriggerEvaluation | null = null;
   for (const trigger of triggers) {
     elizaLogger.debug('Evaluating trigger', { type: trigger.type });
-    if (await triggerManager.evaluateTrigger(trigger)) {
+    const evaluation = await triggerManager.evaluateTrigger(trigger);
+    if (evaluation.isTriggered) {
       shouldProcessTask = true;
       firstPositiveTrigger = trigger;
+      triggerEvaluation = evaluation;
       break;
     }
   }
@@ -36,7 +42,9 @@ export async function processTask(
     elizaLogger.debug('No triggers activated, skipping task processing');
     return;
   }
-  elizaLogger.info(`Trigger activated: ${firstPositiveTrigger?.type}`);
+  elizaLogger.info(`Trigger activated: ${firstPositiveTrigger?.type}`, {
+    reason: triggerEvaluation?.reason
+  });
 
   // Create memory for first positive trigger if found
   let triggerMemory: Memory | null = null;
@@ -46,50 +54,49 @@ export async function processTask(
     agentId: runtime.agentId,
     userId: runtime.agentId,
     content: {
-      text: `Trigger activated: ${firstPositiveTrigger.type}`,
+      text: `Trigger activated: ${firstPositiveTrigger.type} - ${triggerEvaluation.reason}`,
       type: firstPositiveTrigger.type,
-      params: firstPositiveTrigger.params
+      params: firstPositiveTrigger.params,
+      evaluation: triggerEvaluation
     },
     createdAt: Date.now()
   };
   await runtime.messageManager.createMemory(triggerMemory);
 
-  // Initial state composition
+  // Initial state composition from triggerMemory
   let state = await runtime.composeState(triggerMemory, {
     agentName: runtime.character.name,
-    tasks: allTasks
+    tasks: allTasks,
+    notes
   });
 
   // Generate response based on current task and state
   let template = triggerHandlerTemplate;
   
-  // Replace all template placeholders
-  const replacements = {
-    currentTask: `Description: ${task.description}\nDefinition of Done: ${task.definitionOfDone}`,
-    agentName: runtime.character.name,
-    actionExamples: state.actionExamples || '',
-    providers: state.providers || '',
-    recentMessages: state.recentMessages || '',
-    actions: state.actions || ''
-  };
+  // Format tasks and notes
+  const formattedTasks = allTasks.map(t => 
+    `- Description: ${t.description}\n  Status: ${t.status}\n  Definition of Done: ${t.definitionOfDone}`
+  ).join('\n');
 
-  // Handle tasks array replacement
-  const tasksTemplate = allTasks.map(t => `
-- Task: ${t.description}
-  Status: ${t.status}
-  Definition of Done: ${t.definitionOfDone}`).join('\n');
-  
-  template = template
-    .replace('{{currentTask}}', replacements.currentTask)
-    .replace('{{agentName}}', replacements.agentName)
-    .replace('{{actionExamples}}', replacements.actionExamples)
-    .replace('{{providers}}', replacements.providers)
-    .replace('{{recentMessages}}', replacements.recentMessages)
-    .replace('{{actions}}', replacements.actions)
-    .replace(/{{#each tasks}}[\s\S]*?{{\/each}}/g, tasksTemplate);
+  const formattedNotes = notes.map(n => 
+    `- Key: ${n.key}\n  Value: ${n.value}\n  Category: ${n.metadata?.category || 'N/A'}\n  Priority: ${n.metadata?.priority || 'N/A'}`
+  ).join('\n');
+
+  const formattedCurrentTask = `Description: ${task.description}\nDefinition of Done: ${task.definitionOfDone}`;
+
   const context = composeContext({
-    state,
-    template
+    state: {
+      ...state,
+      tasks: formattedTasks,
+      currentTask: formattedCurrentTask,
+      notes: formattedNotes,
+      agentName: runtime.character.name,
+      actionExamples: state.actionExamples || '',
+      providers: state.providers || '',
+      recentMessages: state.recentMessages || '',
+      actions: state.actions || ''
+    },
+    template: triggerHandlerTemplate
   });
 
   elizaLogger.debug('Generating response for task...', { taskDescription: task.description });
@@ -125,8 +132,12 @@ export async function processTask(
     state,
     callback(responseMemory.id)
   );
+  console.log({ stateBefore: state })
+  state = await runtime.updateRecentMessageState(state);
+  console.log({ stateAfter: state })
 
   await runtime.evaluate(triggerMemory || responseMemory, state, true);
+  state = await runtime.updateRecentMessageState(state);
 
   // Check if task is complete
   elizaLogger.debug('Evaluating task completion...');
@@ -136,21 +147,29 @@ export async function processTask(
     await taskManager.updateTask(task);
 
     // Adjust triggers for next task
-    let template = triggerAdjustmentTemplate;
-    
-    // Replace all template placeholders
+    const currentTaskInfo = await taskManager.getCurrentTaskInfo();
+    const nextTasksInfo = await taskManager.getNextTasksInfo();
     const activeTriggers = await triggerManager.getAllTriggers();
-    const triggersTemplate = activeTriggers.map(t => `
-- Type: ${t.type}
-  Parameters: ${JSON.stringify(t.params)}`).join('\n');
     
-    template = template
-      .replace('{{taskDescription}}', task.description)
-      .replace('{{recentMessages}}', state.recentMessages || '')
-      .replace(/{{#each activeTriggers}}[\s\S]*?{{\/each}}/g, triggersTemplate);
+    // Format active price triggers
+    const formattedTriggers = activeTriggers
+      .filter(t => t.type === 'price')
+      .map(t => `- Type: ${t.type}\n  Parameters: ${JSON.stringify(t.params, null, 2)}`)
+      .join('\n');
+
+    const formattedNotes = notes.map(n => 
+      `- Key: ${n.key}\n  Value: ${n.value}\n  Category: ${n.metadata?.category || 'N/A'}`
+    ).join('\n');
+    
     const triggerContext = composeContext({
-      state,
-      template
+      state: {
+        ...state,
+        currentTask: currentTaskInfo || '',
+        nextTasks: nextTasksInfo,
+        activeTriggers: formattedTriggers,
+        notes: formattedNotes
+      },
+      template: triggerAdjustmentTemplate
     });
 
     elizaLogger.debug('Generating trigger adjustments for completed task...');
@@ -195,5 +214,8 @@ export async function processTask(
         elizaLogger.error("Error adjusting triggers:", error);
       }
     }
+
+    // Evaluate and adjust notes
+    await noteManager.evaluateNotes(state);
   }
 }

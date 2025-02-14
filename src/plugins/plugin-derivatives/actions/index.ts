@@ -104,12 +104,30 @@ export const PlaceOrderAction = createAction(createTool(
 
     const instrumentName = assertAndParseInstrumentName(parameters.instrumentName)
 
-    // Basic validation.  More thorough validation would be needed in a real implementation
     if (parameters.type === "limit" && parameters.price === undefined) {
       throw new Error("Limit price is required for limit orders");
     }
 
-    // Mock implementation - just return a confirmation message
     return `Successfully placed ${parameters.side} order for ${parameters.amount} of ${instrumentName} at ${parameters.type === "limit" ? parameters.price : "market price"}`;
   }
 ))
+
+export const NoneAction = createAction(createTool(
+  {
+  name: "NONE",
+    description: "Respond but perform no additional action. This is the default if the agent is speaking and not doing anything additional.",
+    parameters: z.object({}),
+  },
+  async () => {
+    return true;
+  }
+))
+
+NoneAction.similes = [
+  "NO_ACTION",
+  "NO_RESPONSE",
+  "NO_REACTION",
+  "RESPONSE",
+  "REPLY",
+  "DEFAULT",
+];

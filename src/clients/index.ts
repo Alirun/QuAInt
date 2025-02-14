@@ -16,7 +16,13 @@ export async function initializeClients(
   }
 
   if (clientTypes.includes("trader")) {
-    const traderClient = await TraderClient.start(runtime);
+    const traderClient = await TraderClient.start(
+      runtime,
+      // @ts-ignore
+      {
+        iterationMode: 'manual',
+      }
+    );
     if (traderClient) clients.push(traderClient);
   }
 

@@ -1,11 +1,13 @@
 import { IAgentRuntime, Memory, MemoryManager, State, composeContext, generateObject, ModelClass, stringToUuid, UUID, elizaLogger } from "@elizaos/core";
 import { z } from "zod";
-import { Trigger, TriggerManager, TriggerMemory, TriggerType } from "./types";
+import { Trigger, TriggerManager, TriggerMemory, TriggerType, TriggerEvaluation } from "./types";
 import { triggerEvaluationTemplate } from "../constants/templates";
 
 const TriggerEvaluationSchema = z.object({
   isTriggered: z.boolean(),
-  reason: z.string()
+  reason: z.string(),
+  response: z.any().optional(),
+  timestamp: z.number()
 }).strict();
 
 export class DefaultTriggerManager implements TriggerManager {
@@ -25,6 +27,19 @@ export class DefaultTriggerManager implements TriggerManager {
   }
 
   async addTrigger(trigger: Trigger): Promise<void> {
+    // For polling triggers, ensure only one exists
+    if (trigger.type === TriggerType.POLLING) {
+      const existingPolling = await this.getTriggersByType(TriggerType.POLLING);
+      if (existingPolling.length > 0) {
+        elizaLogger.warn('Polling trigger already exists, skipping addition of new polling trigger');
+        return;
+      }
+      // Validate polling trigger interval
+      if (!trigger.params.interval || typeof trigger.params.interval !== 'number' || trigger.params.interval < 1000) {
+        trigger.params.interval = 5000; // Default to 5 seconds if invalid
+      }
+    }
+
     const memory: TriggerMemory = {
       id: stringToUuid(trigger.id),
       roomId: this.roomId,
@@ -46,6 +61,12 @@ export class DefaultTriggerManager implements TriggerManager {
   }
 
   async updateTrigger(trigger: Trigger): Promise<void> {
+    // Prevent modification of polling triggers
+    if (trigger.type === TriggerType.POLLING) {
+      elizaLogger.warn('Modification of polling triggers is not allowed');
+      return;
+    }
+
     const memory: TriggerMemory = {
       id: stringToUuid(trigger.id),
       roomId: this.roomId,
@@ -54,12 +75,12 @@ export class DefaultTriggerManager implements TriggerManager {
       content: {
         text: `Trigger ${trigger.type}`,
         type: trigger.type,
-        params: trigger.params
+        params: trigger.params,
+        evaluation: trigger.lastEvaluation
       },
       createdAt: Date.now()
     };
 
-    // In MemoryManager, update is done by creating a new memory
     await this.triggerManager.createMemory(memory);
   }
 
@@ -71,7 +92,8 @@ export class DefaultTriggerManager implements TriggerManager {
         id: memory.id,
         type: memory.content.type as TriggerType,
         params: memory.content.params as Record<string, any>,
-        lastCheck: memory.content.lastCheck as number | undefined
+        lastCheck: memory.content.lastCheck as number | undefined,
+        lastEvaluation: memory.content.evaluation as TriggerEvaluation | undefined
       }));
   }
 
@@ -79,27 +101,58 @@ export class DefaultTriggerManager implements TriggerManager {
     const memories = await this.triggerManager.getMemories({ roomId: this.roomId });
     return memories.map(memory => ({
       id: memory.id,
-        type: memory.content.type as TriggerType,
+      type: memory.content.type as TriggerType,
       params: memory.content.params as Record<string, any>,
-      lastCheck: memory.content.lastCheck as number | undefined
+      lastCheck: memory.content.lastCheck as number | undefined,
+      lastEvaluation: memory.content.evaluation as TriggerEvaluation | undefined
     }));
   }
 
-  async evaluateTrigger(trigger: Trigger, state?: State): Promise<boolean> {
+  // State is temporary useless and considered deprecated for now
+  async evaluateTrigger(trigger: Trigger, state?: State): Promise<TriggerEvaluation> {
+    const now = Date.now();
+
     if (trigger.type === TriggerType.POLLING) {
-      // Polling trigger always returns true to indicate task should be reevaluated
-      return true;
+      const interval = trigger.params.interval || 5000;
+      if (!trigger.lastCheck || now - trigger.lastCheck >= interval) {
+        const evaluation: TriggerEvaluation = {
+          isTriggered: true,
+          reason: 'Proceed with the configured command',
+          timestamp: now
+        };
+        trigger.lastCheck = now;
+        trigger.lastEvaluation = evaluation;
+        await this.updateTrigger(trigger);
+        return evaluation;
+      }
+      return {
+        isTriggered: false,
+        reason: `Polling interval of ${trigger.params.interval}ms has not elapsed`,
+        timestamp: now
+      };
     }
 
     if (trigger.type === TriggerType.DYNAMIC) {
-      const now = Date.now();
-      if (!trigger.lastCheck || now - trigger.lastCheck >= trigger.params.interval) {
+      const interval = trigger.params.interval || 5000;
+      if (!trigger.lastCheck || now - trigger.lastCheck >= interval) {
         trigger.lastCheck = now;
-        await this.updateTrigger(trigger);
-        
+
+        if (!trigger.params.condition) {
+          elizaLogger.warn('No condition provided for dynamic trigger evaluation, defaulting to false');
+          return {
+            isTriggered: false,
+            reason: 'No condition provided for evaluation',
+            timestamp: now
+          };
+        }
+
         if (!state) {
           elizaLogger.warn('No state provided for dynamic trigger evaluation, defaulting to false');
-          return false;
+          return {
+            isTriggered: false,
+            reason: 'No state provided for evaluation',
+            timestamp: now
+          };
         }
 
         const template = triggerEvaluationTemplate
@@ -110,17 +163,33 @@ export class DefaultTriggerManager implements TriggerManager {
           template
         });
 
-        const evaluation = await generateObject({
-          runtime: this.runtime,
-          context,
-          modelClass: ModelClass.SMALL,
-          // @ts-ignore: Suppress zod version mismatch error
-          schema: TriggerEvaluationSchema
-        });
+        try {
+          const evaluation = await generateObject({
+            runtime: this.runtime,
+            context,
+            modelClass: ModelClass.SMALL,
+            // @ts-ignore: Suppress zod version mismatch error
+            schema: TriggerEvaluationSchema
+          });
 
-        return (evaluation.object as { isTriggered: boolean }).isTriggered;
+          const result = evaluation.object as TriggerEvaluation;
+          trigger.lastEvaluation = result;
+          await this.updateTrigger(trigger);
+          return result;
+        } catch (error) {
+          elizaLogger.error('Error evaluating dynamic trigger:', error);
+          return {
+            isTriggered: false,
+            reason: `Error evaluating trigger: ${error.message}`,
+            timestamp: now
+          };
+        }
       }
-      return false;
+      return {
+        isTriggered: false,
+        reason: `Dynamic trigger interval of ${trigger.params.interval}ms has not elapsed`,
+        timestamp: now
+      };
     }
 
     if (trigger.type === TriggerType.PRICE) {
@@ -128,9 +197,17 @@ export class DefaultTriggerManager implements TriggerManager {
       // This would typically involve checking current market prices
       // against the trigger's target price and direction
       elizaLogger.debug('Price trigger evaluation not implemented yet, defaulting to false');
-      return false;
+      return {
+        isTriggered: false,
+        reason: 'Price trigger evaluation not implemented',
+        timestamp: now
+      };
     }
 
-    return false;
+    return {
+      isTriggered: false,
+      reason: `Unknown trigger type: ${trigger.type}`,
+      timestamp: now
+    };
   }
 }

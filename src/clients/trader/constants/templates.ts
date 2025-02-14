@@ -12,14 +12,13 @@ Your overarching mission is to continuously monitor the cryptocurrency market an
 Your decisions must always align with the long-term goal of optimizing returns while strictly managing risk.
 
 # All Tasks
-{{#each tasks}}
-- Task: {{this.description}}
-  Status: {{this.status}}
-  Definition of Done: {{this.definitionOfDone}}
-{{/each}}
+{{tasks}}
 
 # Current Task
 {{currentTask}}
+
+# Relevant Notes
+{{notes}}
 
 # Task: Generate dialog and actions for the {{agentName}}
 (Explicitly specify action details in response text if they were requested by action description)
@@ -34,16 +33,23 @@ Your decisions must always align with the long-term goal of optimizing returns w
 ` + messageCompletionFooter;
 
 export const triggerAdjustmentTemplate = `
-Based on the current task and recent conversations, determine what triggers should be active:
+Based on the current task, next tasks, and recent conversations, determine what price triggers should be active:
 
-Current Task: {{taskDescription}}
-Available Trigger Types: polling, dynamic, price
+Current Task: {{currentTask}}
 
-Active Triggers:
-{{#each activeTriggers}}
-- Type: {{this.type}}
-  Parameters: {{this.params}}
-{{/each}}
+Next Tasks: {{nextTasks}}
+
+Available Trigger Type: price
+Price Trigger Capabilities:
+- Monitors cryptocurrency price movements
+- Parameters:
+  * targetPrice: number (required) - The price level to monitor
+  * direction: "above" | "below" (required) - Trigger when price moves above or below target
+  * symbol: string (required) - Trading pair symbol (e.g. "BTC-USD")
+
+Active Price Triggers: {{activeTriggers}}
+
+Relevant Notes: {{notes}}
 
 Recent conversations:
 {{recentMessages}}
@@ -61,10 +67,12 @@ Respond with a JSON array of triggers to set/modify/remove:
 `;
 
 export const taskCompletionTemplate = `
-Evaluate if the following task is complete based on recent conversations and market state:
+Evaluate if the following task is complete based on recent conversations, market state, and relevant notes:
 
 Task Description: {{description}}
 Definition of Done: {{definitionOfDone}}
+
+Relevant Notes: {{taskNotes}}
 
 Recent conversations:
 {{recentMessages}}
@@ -81,12 +89,48 @@ Evaluate if the following trigger condition is met based on recent conversations
 
 Condition: {{condition}}
 
+Relevant Notes: {{notes}}
+
 Recent conversations:
 {{recentMessages}}
 
 Respond with a JSON object:
 {
   "isTriggered": true/false,
-  "reason": "explanation"
+  "reason": "explanation",
+  "response": object (optional),
+  "timestamp": number
+}
+`;
+
+export const noteEvaluationTemplate = `
+Evaluate the current state and determine what notes should be managed:
+
+Current Task: {{currentTask}}
+
+Next Tasks: {{nextTasks}}
+
+Existing Notes: {{notes}}
+
+Recent conversations and state:
+{{recentMessages}}
+{{marketState}}
+
+Respond with a JSON array of note operations:
+{
+  "notes": [
+    {
+      "action": "add|update|remove",
+      "key": "string",
+      "value": "any",
+      "metadata": {
+        "taskId": "string (optional)",
+        "category": "string (optional)",
+        "priority": "number (optional)",
+        "tags": ["string"] (optional)
+      },
+      "reason": "explanation for this operation"
+    }
+  ]
 }
 `;

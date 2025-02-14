@@ -1,4 +1,4 @@
-import { Memory } from "@elizaos/core";
+import { Memory, State } from "@elizaos/core";
 
 export enum TriggerType {
   POLLING = 'polling',
@@ -6,11 +6,19 @@ export enum TriggerType {
   DYNAMIC = 'dynamic',
 }
 
+export interface TriggerEvaluation {
+  isTriggered: boolean;
+  reason: string;
+  response?: any;
+  timestamp: number;
+}
+
 export interface Trigger {
   id: string;
   type: TriggerType;
   params: Record<string, any>;
   lastCheck?: number;
+  lastEvaluation?: TriggerEvaluation;
 }
 
 export interface Task {
@@ -21,6 +29,19 @@ export interface Task {
   triggerTypes: TriggerType[];
   data?: Record<string, any>;
   createdAt: number;
+}
+
+export interface Note {
+  id: string;
+  key: string;
+  value: any;
+  metadata?: {
+    taskId?: string;
+    category?: string;
+    priority?: number;
+    tags?: string[];
+  };
+  timestamp: number;
 }
 
 export interface TaskManager {
@@ -37,6 +58,17 @@ export interface TriggerManager {
   updateTrigger(trigger: Trigger): Promise<void>;
   getTriggersByType(type: TriggerType): Promise<Trigger[]>;
   getAllTriggers(): Promise<Trigger[]>;
+  evaluateTrigger(trigger: Trigger, state?: State): Promise<TriggerEvaluation>;
+}
+
+export interface NoteManager {
+  addNote(key: string, value: any, metadata?: Note['metadata']): Promise<void>;
+  updateNote(key: string, value: any, metadata?: Note['metadata']): Promise<void>;
+  removeNote(key: string): Promise<void>;
+  getNote(key: string): Promise<Note | null>;
+  getAllNotes(): Promise<Note[]>;
+  getNotesByTask(taskId: string): Promise<Note[]>;
+  evaluateNotes(state: State): Promise<void>;
 }
 
 export interface TaskMemory extends Memory {
@@ -56,5 +88,16 @@ export interface TriggerMemory extends Memory {
     text: string;
     type: TriggerType;
     params: Record<string, any>;
+    evaluation?: TriggerEvaluation;
+  };
+}
+
+export interface NoteMemory extends Memory {
+  content: {
+    text: string;
+    key: string;
+    value: any;
+    metadata?: Note['metadata'];
+    timestamp: number;
   };
 }

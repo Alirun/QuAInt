@@ -1,6 +1,6 @@
 import { IAgentRuntime, Memory, MemoryManager, State, composeContext, generateObject, ModelClass, stringToUuid, UUID } from "@elizaos/core";
 import { z } from "zod";
-import { Task, TaskManager, TaskMemory, TriggerType } from "./types";
+import { Task, TaskManager, TaskMemory, TriggerType, Note } from "./types";
 import { taskCompletionTemplate } from "../constants/templates";
 
 type TaskCompletion = {
@@ -151,14 +151,48 @@ export class DefaultTaskManager implements TaskManager {
     return this.getLatestTasks();
   }
 
-  async evaluateTaskCompletion(task: Task, state: State): Promise<boolean> {
-    const template = taskCompletionTemplate
-      .replace('{{description}}', task.description)
-      .replace('{{definitionOfDone}}', task.definitionOfDone);
+  async getNextTasks(): Promise<Task[]> {
+    const allTasks = await this.getLatestTasks();
+    return allTasks.filter(t => t.status === 'pending');
+  }
 
+  private formatTask(task: Task): string {
+    return `Description: ${task.description}\nStatus: ${task.status}\nDefinition of Done: ${task.definitionOfDone}`;
+  }
+
+  private formatTasks(tasks: Task[]): string {
+    return tasks.map(task => 
+      `- ${this.formatTask(task)}`
+    ).join('\n');
+  }
+
+  async getCurrentTaskInfo(): Promise<string | null> {
+    if (!this.currentTask) return null;
+    return this.formatTask(this.currentTask);
+  }
+
+  async getNextTasksInfo(): Promise<string> {
+    const nextTasks = await this.getNextTasks();
+    return this.formatTasks(nextTasks);
+  }
+
+  async evaluateTaskCompletion(task: Task, state: State): Promise<boolean> {
+    // Get task-specific notes
+    const notes = (state.notes || []) as Note[];
+    const taskNotes = notes.filter(note => note.metadata?.taskId === task.id);
+    
+    const formattedNotes = taskNotes.map(n => 
+      `- Key: ${n.key}\n  Value: ${n.value}\n  Category: ${n.metadata?.category || 'N/A'}`
+    ).join('\n');
+    
     const context = composeContext({
-      state,
-      template
+      state: {
+        ...state,
+        description: task.description,
+        definitionOfDone: task.definitionOfDone,
+        taskNotes: formattedNotes
+      },
+      template: taskCompletionTemplate
     });
 
     try {
