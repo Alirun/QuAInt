@@ -33,9 +33,15 @@ export class DefaultTaskManager implements TaskManager {
   async initialize(): Promise<void> {
     const tasks = await this.getLatestTasks();
     // Find oldest non-completed task
-    this.currentTask = tasks
+    const nextTask = tasks
       .filter(t => t.status !== 'completed')
       .sort((a, b) => a.createdAt - b.createdAt)[0];
+    
+    if (nextTask) {
+      nextTask.status = 'in_progress';
+      await this.updateTask(nextTask);
+      this.currentTask = nextTask;
+    }
   }
 
   async addTask(task: Task): Promise<void> {
@@ -61,8 +67,10 @@ export class DefaultTaskManager implements TaskManager {
 
     await this.taskManager.createMemory(memory);
     
-    // If no current task, set this as current
+    // If no current task, set this as current and mark as in_progress
     if (!this.currentTask) {
+      task.status = 'in_progress';
+      await this.updateTask(task);
       this.currentTask = task;
     }
   }
@@ -91,12 +99,36 @@ export class DefaultTaskManager implements TaskManager {
     
     // Update current task if this is the current one
     if (this.currentTask?.id === task.id) {
-      // If this task is completed, find the next incomplete task by creation date
+      // If this task is completed, find and set the next task as in_progress
       if (task.status === 'completed') {
         const allTasks = await this.getLatestTasks();
-        this.currentTask = allTasks
+        const nextTask = allTasks
           .filter(t => t.status !== 'completed')
           .sort((a, b) => a.createdAt - b.createdAt)[0];
+        
+        if (nextTask) {
+          nextTask.status = 'in_progress';
+          await this.taskManager.removeMemory(stringToUuid(nextTask.id));
+          await this.taskManager.createMemory({
+            id: stringToUuid(nextTask.id),
+            roomId: this.roomId,
+            userId: this.userId,
+            agentId: this.agentId,
+            content: {
+              text: nextTask.description,
+              description: nextTask.description,
+              definitionOfDone: nextTask.definitionOfDone,
+              status: nextTask.status,
+              triggerTypes: nextTask.triggerTypes,
+              data: nextTask.data,
+              createdAt: nextTask.createdAt
+            },
+            createdAt: Date.now()
+          });
+          this.currentTask = nextTask;
+        } else {
+          this.currentTask = undefined;
+        }
       } else {
         this.currentTask = task;
       }
@@ -205,6 +237,24 @@ export class DefaultTaskManager implements TaskManager {
       });
 
       const result = evaluation.object as TaskCompletion;
+      
+      // Create memory for task completion evaluation
+      const completionMemory: Memory = {
+        id: stringToUuid(`${Date.now()}-task-completion`),
+        roomId: this.roomId,
+        userId: this.userId,
+        agentId: this.agentId,
+        content: {
+          text: `Task completion evaluation: ${result.reason}`,
+          taskId: task.id,
+          taskDescription: task.description,
+          isComplete: result.isComplete,
+          reason: result.reason
+        },
+        createdAt: Date.now()
+      };
+      await this.runtime.messageManager.createMemory(completionMemory);
+      
       return result.isComplete;
     } catch (error) {
       return false;

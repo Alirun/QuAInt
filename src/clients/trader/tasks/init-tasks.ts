@@ -8,40 +8,64 @@ export async function initializeTasks(taskManager: DefaultTaskManager) {
     {
       id: stringToUuid("analyze-market").toString(),
       createdAt: timestamp,
-      description: "Analyze market and find the most profitable option call to sell",
-      definitionOfDone: "Identified the most profitable option call based on market analysis, including strike price, expiration, and expected profit potential",
+      description: "Analyze cryptocurrency market to identify the most profitable option call to sell, considering volatility, liquidity, and market trends",
+      definitionOfDone: "Identified optimal option call with detailed analysis of: strike price, expiration date, premium, expected profit, and risk assessment",
       status: "pending",
-      triggerTypes: [TriggerType.POLLING], // Regular market analysis
+      triggerTypes: [TriggerType.POLLING],
       data: {
         type: "market_analysis",
         parameters: {
           optionType: "call",
           position: "sell"
+        },
+        triggerUsage: {
+          [TriggerType.POLLING]: "Regular market analysis to continuously monitor market conditions and identify optimal entry points"
         }
       }
     },
     {
       id: stringToUuid("open-position").toString(),
       createdAt: timestamp + 1,
-      description: "Open position",
-      definitionOfDone: "Successfully opened the identified option position with confirmation of execution",
+      description: "Execute option sell order based on market analysis findings",
+      definitionOfDone: "Successfully placed and confirmed sell order for the identified option call with specified parameters (strike, expiry, quantity)",
       status: "pending",
-      triggerTypes: [TriggerType.PRICE], // Execute when price conditions are met
+      triggerTypes: [TriggerType.POLLING],
       data: {
         type: "trade_execution",
-        action: "open"
+        action: "open",
+        triggerUsage: {
+          [TriggerType.POLLING]: "Regular checks to monitor order placement status and confirm execution details"
+        }
+      }
+    },
+    {
+      id: stringToUuid("monitor-position").toString(),
+      createdAt: timestamp + 2,
+      description: "Monitor option position for profit target or stop-loss levels",
+      definitionOfDone: "Detected when position should be closed based on profit target or stop-loss conditions",
+      status: "pending",
+      triggerTypes: [TriggerType.PRICE],
+      data: {
+        type: "position_monitoring",
+        action: "monitor",
+        triggerUsage: {
+          [TriggerType.PRICE]: "Monitor specific price levels to detect when profit target or stop-loss levels are reached"
+        }
       }
     },
     {
       id: stringToUuid("close-position").toString(),
-      createdAt: timestamp + 2,
-      description: "Close position and take profit",
-      definitionOfDone: "Successfully closed the position with profit target achieved",
+      createdAt: timestamp + 3,
+      description: "Execute option position closure",
+      definitionOfDone: "Successfully closed the position with full execution confirmation",
       status: "pending",
-      triggerTypes: [TriggerType.PRICE], // Execute when profit target is reached
+      triggerTypes: [TriggerType.POLLING],
       data: {
         type: "trade_execution",
-        action: "close"
+        action: "close",
+        triggerUsage: {
+          [TriggerType.POLLING]: "Regular checks to monitor position closure status and confirm execution details"
+        }
       }
     }
   ];

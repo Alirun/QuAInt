@@ -59,6 +59,7 @@ export interface TriggerManager {
   getTriggersByType(type: TriggerType): Promise<Trigger[]>;
   getAllTriggers(): Promise<Trigger[]>;
   evaluateTrigger(trigger: Trigger, state?: State): Promise<TriggerEvaluation>;
+  evaluateAndAdjustTriggers(state: State): Promise<void>;
 }
 
 export interface NoteManager {

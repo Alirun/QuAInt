@@ -1,13 +1,22 @@
 import { IAgentRuntime, Memory, MemoryManager, State, composeContext, generateObject, ModelClass, stringToUuid, UUID, elizaLogger } from "@elizaos/core";
 import { z } from "zod";
 import { Trigger, TriggerManager, TriggerMemory, TriggerType, TriggerEvaluation } from "./types";
-import { triggerEvaluationTemplate } from "../constants/templates";
+import { triggerEvaluationTemplate, triggerAdjustmentTemplate } from "../constants/templates";
 
 const TriggerEvaluationSchema = z.object({
   isTriggered: z.boolean(),
   reason: z.string(),
   response: z.any().optional(),
   timestamp: z.number()
+}).strict();
+
+const TriggerAdjustmentSchema = z.object({
+  triggers: z.array(z.object({
+    type: z.nativeEnum(TriggerType),
+    params: z.record(z.any()),
+    action: z.enum(['add', 'remove', 'modify']),
+    id: z.string().optional()
+  }))
 }).strict();
 
 export class DefaultTriggerManager implements TriggerManager {
@@ -109,6 +118,63 @@ export class DefaultTriggerManager implements TriggerManager {
   }
 
   // State is temporary useless and considered deprecated for now
+  async evaluateAndAdjustTriggers(state: State): Promise<void> {
+    elizaLogger.debug('Generating trigger adjustments...');
+    
+    const context = composeContext({
+      state: {
+        ...state,
+        currentTask: state.currentTask || '',
+        tasks: state.tasks || '',
+        activeTriggers: state.activeTriggers || '',
+        notes: state.notes || ''
+      },
+      template: triggerAdjustmentTemplate
+    });
+
+    try {
+      const result = await generateObject({
+        runtime: this.runtime,
+        context,
+        modelClass: ModelClass.SMALL,
+        // @ts-ignore: Suppress zod version mismatch error
+        schema: TriggerAdjustmentSchema
+      });
+
+      const adjustments = result.object as z.infer<typeof TriggerAdjustmentSchema>;
+      elizaLogger.info(`Processing ${adjustments.triggers.length} trigger adjustments`);
+
+      for (const trigger of adjustments.triggers) {
+        elizaLogger.debug('Processing trigger adjustment', { action: trigger.action, type: trigger.type });
+        switch (trigger.action) {
+          case 'add':
+            await this.addTrigger({
+              id: stringToUuid(`${Date.now()}`).toString(),
+              type: trigger.type,
+              params: trigger.params
+            });
+            break;
+          case 'remove':
+            if (trigger.id) {
+              await this.removeTrigger(trigger.id);
+            }
+            break;
+          case 'modify':
+            if (trigger.id) {
+              await this.updateTrigger({
+                id: trigger.id,
+                type: trigger.type,
+                params: trigger.params
+              });
+            }
+            break;
+        }
+      }
+    } catch (error) {
+      elizaLogger.error('Error adjusting triggers:', error);
+    }
+  }
+
   async evaluateTrigger(trigger: Trigger, state?: State): Promise<TriggerEvaluation> {
     const now = Date.now();
 
@@ -117,7 +183,7 @@ export class DefaultTriggerManager implements TriggerManager {
       if (!trigger.lastCheck || now - trigger.lastCheck >= interval) {
         const evaluation: TriggerEvaluation = {
           isTriggered: true,
-          reason: 'Proceed with the configured command',
+          reason: 'Proceed with the action',
           timestamp: now
         };
         trigger.lastCheck = now;

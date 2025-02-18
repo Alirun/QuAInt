@@ -11,14 +11,25 @@ You are an autonomous trading agent and quantitative analyst specializing in cry
 Your overarching mission is to continuously monitor the cryptocurrency market and execute data-driven trading strategies that generate profits while rigorously managing risk—all within the confines of a fixed account balance (no additional funds will be provided).
 Your decisions must always align with the long-term goal of optimizing returns while strictly managing risk.
 
-# All Tasks
+# Tasks
 {{tasks}}
 
-# Current Task
-{{currentTask}}
+# Active Triggers
+{{activeTriggers}}
 
 # Relevant Notes
 {{notes}}
+
+# Available Trigger Types
+1. POLLING - Regular interval checks (e.g., every 5 seconds)
+   - Parameters:
+     * interval: number - Check interval in milliseconds (default: 5000)
+
+2. PRICE - Cryptocurrency price level monitoring
+   - Parameters:
+     * targetPrice: number - The price level to monitor
+     * direction: "above" | "below" - Trigger when price moves above or below target
+     * symbol: string - Trading pair symbol (e.g. "BTC-USD")
 
 # Task: Generate dialog and actions for the {{agentName}}
 (Explicitly specify action details in response text if they were requested by action description)
@@ -33,25 +44,32 @@ Your decisions must always align with the long-term goal of optimizing returns w
 ` + messageCompletionFooter;
 
 export const triggerAdjustmentTemplate = `
-Based on the current task, next tasks, and recent conversations, determine what price triggers should be active:
+Based on the current task, next tasks, and recent conversations, determine what triggers should be active:
 
 Current Task: {{currentTask}}
 
-Next Tasks: {{nextTasks}}
+# Tasks
+{{tasks}}
 
-Available Trigger Type: price
-Price Trigger Capabilities:
-- Monitors cryptocurrency price movements
-- Parameters:
-  * targetPrice: number (required) - The price level to monitor
-  * direction: "above" | "below" (required) - Trigger when price moves above or below target
-  * symbol: string (required) - Trading pair symbol (e.g. "BTC-USD")
+# Available Trigger Types
 
-Active Price Triggers: {{activeTriggers}}
+1. POLLING - Regular interval checks
+   - Parameters:
+     * interval: number - Check interval in milliseconds (default: 5000)
 
-Relevant Notes: {{notes}}
+2. PRICE - Cryptocurrency price monitoring
+   - Parameters:
+     * targetPrice: number - The price level to monitor
+     * direction: "above" | "below" - Trigger when price moves above or below target
+     * symbol: string - Trading pair symbol (e.g. "BTC-USD")
 
-Recent conversations:
+# Active Triggers
+{{activeTriggers}}
+
+# Relevant Notes
+{{notes}}
+
+# Recent Conversations
 {{recentMessages}}
 
 Respond with a JSON array of triggers to set/modify/remove:
@@ -69,12 +87,14 @@ Respond with a JSON array of triggers to set/modify/remove:
 export const taskCompletionTemplate = `
 Evaluate if the following task is complete based on recent conversations, market state, and relevant notes:
 
-Task Description: {{description}}
+# Task
+Description: {{description}}
 Definition of Done: {{definitionOfDone}}
 
-Relevant Notes: {{taskNotes}}
+# Relevant Notes
+{{taskNotes}}
 
-Recent conversations:
+# Recent Conversations
 {{recentMessages}}
 
 Respond with a JSON object:
@@ -87,11 +107,13 @@ Respond with a JSON object:
 export const triggerEvaluationTemplate = `
 Evaluate if the following trigger condition is met based on recent conversations and market state:
 
-Condition: {{condition}}
+# Condition
+{{condition}}
 
-Relevant Notes: {{notes}}
+# Relevant Notes
+{{notes}}
 
-Recent conversations:
+# Recent Conversations
 {{recentMessages}}
 
 Respond with a JSON object:
@@ -106,13 +128,13 @@ Respond with a JSON object:
 export const noteEvaluationTemplate = `
 Evaluate the current state and determine what notes should be managed:
 
-Current Task: {{currentTask}}
+# Tasks
+{{tasks}}
 
-Next Tasks: {{nextTasks}}
+# Existing Notes
+{{notes}}
 
-Existing Notes: {{notes}}
-
-Recent conversations and state:
+# Recent State
 {{recentMessages}}
 {{marketState}}
 
