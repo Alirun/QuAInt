@@ -149,7 +149,7 @@ export class DefaultTriggerManager implements TriggerManager {
         switch (trigger.action) {
           case 'add':
             await this.addTrigger({
-              id: stringToUuid(`${Date.now()}`).toString(),
+              id: trigger.id || stringToUuid(`${Date.now()}`).toString(),
               type: trigger.type,
               params: trigger.params
             });

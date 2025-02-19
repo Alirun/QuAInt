@@ -1,61 +1,34 @@
-import { IAgentRuntime, Memory, State } from "@elizaos/core";
+import { IAgentRuntime, Memory } from "@elizaos/core";
 import { formatters } from "./formatters";
 import { DefaultTaskManager } from "../core/task-manager";
 import { DefaultNoteManager } from "../core/note-manager";
-
-export interface StateCompositionOptions {
-  includeNotes?: boolean;
-  includeTasks?: boolean;
-  includeCurrentTask?: boolean;
-  includeNextTasks?: boolean;
-}
+import { DefaultTriggerManager } from "../core/trigger-manager";
+import { TraderState } from "../core/types";
 
 export async function composeStateWithDefaults(
   runtime: IAgentRuntime,
   memory: Memory,
-  taskManager?: DefaultTaskManager,
-  noteManager?: DefaultNoteManager,
-  options: StateCompositionOptions = {}
-): Promise<State> {
-  const {
-    includeNotes = true,
-    includeTasks = true,
-    includeCurrentTask = true,
-    includeNextTasks = false
-  } = options;
-
+  taskManager: DefaultTaskManager,
+  triggerManager: DefaultTriggerManager,
+  noteManager: DefaultNoteManager
+): Promise<TraderState> {
   const baseState = await runtime.composeState(memory, {
     agentName: runtime.character.name
   });
 
-  const stateExtensions: Partial<State> = {};
+  // Get all data
+  const tasks = await taskManager.getAllTasks();
+  const notes = await noteManager.getAllNotes();
+  const triggers = await triggerManager.getAllTriggers();
 
-  if (includeTasks && taskManager) {
-    const allTasks = await taskManager.getAllTasks();
-    stateExtensions.tasks = formatters.tasks(allTasks);
-  }
-
-  if (includeNotes && noteManager) {
-    const notes = await noteManager.getAllNotes();
-    stateExtensions.notes = formatters.notes(notes);
-  }
-
-  if (includeCurrentTask && taskManager) {
-    const currentTaskInfo = await taskManager.getCurrentTaskInfo();
-    if (currentTaskInfo) {
-      stateExtensions.currentTask = currentTaskInfo;
-    }
-  }
-
-  if (includeNextTasks && taskManager) {
-    const nextTasksInfo = await taskManager.getNextTasksInfo();
-    if (nextTasksInfo) {
-      stateExtensions.nextTasks = nextTasksInfo;
-    }
-  }
-
+  // Compose state with both formatted and raw data
   return {
     ...baseState,
-    ...stateExtensions
+    tasks: formatters.tasks(tasks),
+    notes: formatters.notes(notes),
+    activeTriggers: formatters.triggers(triggers),
+    rawTasks: tasks,
+    rawNotes: notes,
+    rawTriggers: triggers
   };
 }

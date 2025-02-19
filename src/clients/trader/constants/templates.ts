@@ -44,11 +44,9 @@ Your decisions must always align with the long-term goal of optimizing returns w
 ` + messageCompletionFooter;
 
 export const triggerAdjustmentTemplate = `
-Based on the current task, next tasks, and recent conversations, determine what triggers should be active:
+Based on the tasks and recent conversations, determine what triggers should be active:
 
-Current Task: {{currentTask}}
-
-# Tasks
+# Tasks (in order of execution)
 {{tasks}}
 
 # Available Trigger Types
@@ -66,7 +64,7 @@ Current Task: {{currentTask}}
 # Active Triggers
 {{activeTriggers}}
 
-# Relevant Notes
+# Notes
 {{notes}}
 
 # Recent Conversations
@@ -85,14 +83,14 @@ Respond with a JSON array of triggers to set/modify/remove:
 `;
 
 export const taskCompletionTemplate = `
-Evaluate if the following task is complete based on recent conversations, market state, and relevant notes:
+Evaluate if the following task is complete based on recent conversations and market state:
 
 # Task
 Description: {{description}}
 Definition of Done: {{definitionOfDone}}
 
-# Relevant Notes
-{{taskNotes}}
+# Notes
+{{notes}}
 
 # Recent Conversations
 {{recentMessages}}
@@ -128,10 +126,10 @@ Respond with a JSON object:
 export const noteEvaluationTemplate = `
 Evaluate the current state and determine what notes should be managed:
 
-# Tasks
+# Tasks (in order of execution)
 {{tasks}}
 
-# Existing Notes
+# Notes
 {{notes}}
 
 # Recent State
@@ -146,7 +144,6 @@ Respond with a JSON array of note operations:
       "key": "string",
       "value": "any",
       "metadata": {
-        "taskId": "string (optional)",
         "category": "string (optional)",
         "priority": "number (optional)",
         "tags": ["string"] (optional)

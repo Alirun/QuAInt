@@ -41,15 +41,31 @@ export async function iterate(
   triggerManager: DefaultTriggerManager,
   noteManager: DefaultNoteManager
 ): Promise<void> {
-  const currentTask = taskManager.currentTask;
-  if (!currentTask) {
-    elizaLogger.debug('No current task to process');
+  const tasks = await taskManager.getAllTasks();
+  const inProgressTasks = tasks.filter(task => task.status === 'in_progress');
+
+  // Sort tasks by order
+  const sortedTasks = tasks.sort((a, b) => a.order - b.order);
+  
+  // Find the first non-completed task
+  const nextTask = sortedTasks.find(task => task.status !== 'completed');
+  
+  if (!nextTask) {
+    elizaLogger.debug('All tasks completed');
     return;
   }
 
-  elizaLogger.info(`Processing task: ${currentTask.description}`);
+  // If the task isn't in progress, start it
+  if (nextTask.status === 'pending') {
+    nextTask.status = 'in_progress';
+    await taskManager.updateTask(nextTask);
+    elizaLogger.info(`Starting task ${nextTask.order}: ${nextTask.description}`);
+  }
+
+  // Process the current task
+  elizaLogger.info(`Processing task ${nextTask.order}: ${nextTask.description}`);
   await processTask(
-    currentTask,
+    nextTask,
     runtime,
     taskManager,
     triggerManager,

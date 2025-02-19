@@ -1,5 +1,14 @@
 import { Memory, State } from "@elizaos/core";
 
+export interface TraderState extends State {
+  notes?: string;
+  tasks?: string;
+  activeTriggers?: string;
+  rawNotes?: Note[];
+  rawTasks?: Task[];
+  rawTriggers?: Trigger[];
+}
+
 export enum TriggerType {
   POLLING = 'polling',
   PRICE = 'price',
@@ -28,6 +37,7 @@ export interface Task {
   status: 'pending' | 'in_progress' | 'completed';
   triggerTypes: TriggerType[];
   data?: Record<string, any>;
+  order: number;  // Explicit ordering for sequential execution
   createdAt: number;
 }
 
@@ -45,11 +55,11 @@ export interface Note {
 }
 
 export interface TaskManager {
-  currentTask?: Task;
   addTask(task: Task): Promise<void>;
   updateTask(task: Task): Promise<void>;
   getTask(taskId: string): Promise<Task | null>;
   getAllTasks(): Promise<Task[]>;
+  evaluateTaskCompletion(task: Task, state: TraderState): Promise<boolean>;
 }
 
 export interface TriggerManager {
@@ -80,6 +90,7 @@ export interface TaskMemory extends Memory {
     status: Task['status'];
     triggerTypes: TriggerType[];
     data?: Record<string, any>;
+    order: number;
     createdAt: number;
   };
 }

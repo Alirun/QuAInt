@@ -65,7 +65,7 @@ export async function processTask(
   await runtime.messageManager.createMemory(triggerMemory);
 
   // Compose state and generate response
-  let state = await composeStateWithDefaults(runtime, triggerMemory, taskManager, noteManager);
+  let state = await composeStateWithDefaults(runtime, triggerMemory, taskManager, triggerManager, noteManager);
   
   const formattedCurrentTask = `Description: ${task.description}\nDefinition of Done: ${task.definitionOfDone}`;
   

@@ -50,11 +50,12 @@ export const TraderClient: Client = {
       elizaLogger.info("Polling trigger created");
     }
 
-    // Initialize task manager
-    await taskManager.initialize();
-    elizaLogger.info('Current task status', { 
-      hasCurrentTask: !!taskManager.currentTask,
-      currentTaskDescription: taskManager.currentTask?.description 
+    // Log task status
+    const inProgressTasks = tasks.filter(t => t.status === 'in_progress');
+    elizaLogger.info('Task status', { 
+      totalTasks: tasks.length,
+      inProgressCount: inProgressTasks.length,
+      inProgressDescriptions: inProgressTasks.map(t => t.description)
     });
 
     // Ensure connection is established before starting main loop
